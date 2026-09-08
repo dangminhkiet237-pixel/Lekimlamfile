@@ -1,0 +1,33 @@
+name: Run Telegram Bot (24/7 với restart định kỳ)
+
+on:
+  schedule:
+    - cron: '0 */5 * * *'   # Mỗi 5 giờ khởi động lại (để không bị kill)
+  workflow_dispatch:        # Cho phép chạy thủ công
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cài Python và dependencies
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cài thư viện hệ thống (cho impacket)
+        run: sudo apt-get update && sudo apt-get install -y python3-dev gcc
+
+      - name: Cài Python packages
+        run: pip install -r requirements.txt
+
+      - name: Chạy bot (vòng lặp vô hạn – tự động bị kill sau 6h)
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}   # Khuyến khích dùng secret
+        run: |
+          # Nếu bạn đã nhúng token, không cần env, nhưng vẫn để secret để dễ thay
+          python bot.py
+        # Có thể thêm timeout để đảm bảo workflow không chạy quá 6h
+        timeout-minutes: 350   # 5h50 phút, an toàn trước khi bị kill
